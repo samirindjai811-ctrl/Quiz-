@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Interativo</title>
+    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Quiz%20Interativo%22,%22short_name%22:%22Quiz%20App%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230f172a%22,%22theme_color%22:%22%233b82f6%22}">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --primary: #3b82f6;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 15px; }
+        .container { background-color: var(--card-bg); width: 100%; max-width: 500px; border-radius: 16px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h1, h2 { text-align: center; margin-bottom: 20px; color: var(--primary); }
+        .screen { display: none; }
+        .active { display: block; }
+
+        .btn-grid { display: grid; gap: 12px; margin-top: 15px; }
+        button { background-color: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; width: 100%; }
+        button:active { transform: scale(0.98); }
+        
+        .difficulty-easy { background-color: #10b981; }
+        .difficulty-medium { background-color: #f59e0b; }
+        .difficulty-hard { background-color: #ef4444; }
+
+        .status-bar { display: flex; justify-content: space-between; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px 15px; border-radius: 8px; font-weight: bold; }
+        .hint-box { background: rgba(245, 158, 11, 0.15); border-left: 4px solid var(--warning); padding: 10px; margin: 15px 0; border-radius: 4px; color: #fde68a; display: none; }
+        
+        input[type="text"] { width: 100%; padding: 12px; border-radius: 8px; border: 2px solid #334155; background: #0f172a; color: white; font-size: 16px; margin-bottom: 12px; }
+        input[type="text"]:focus { border-color: var(--primary); outline: none; }
+
+        .feedback { text-align: center; font-weight: bold; margin-top: 10px; min-height: 24px; }
+        .correct { color: var(--success); }
+        .incorrect { color: var(--danger); }
+        
+        .result-score { font-size: 32px; text-align: center; color: var(--success); margin: 20px 0; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- ECRÃ 1: CATEGORIAS -->
+    <div id="screen-category" class="screen active">
+        <h1>Quiz Interativo</h1>
+        <p style="text-align: center; color: var(--text-muted); margin-bottom: 15px;">Escolha uma Categoria:</p>
+        <div class="btn-grid">
+            <button onclick="selectCategory('futebol')">⚽ Futebol Mundial</button>
+            <button onclick="selectCategory('paises')">🌍 Países & Geografia</button>
+            <button onclick="selectCategory('filmes')">🎬 Filmes: Marvel & DC</button>
+        </div>
+    </div>
+
+    <!-- ECRÃ 2: DIFICULDADE -->
+    <div id="screen-difficulty" class="screen">
+        <h2>Dificuldade</h2>
+        <div class="btn-grid">
+            <button class="difficulty-easy" onclick="startGame('facil')">🟢 Fácil (3 Pts)</button>
+            <button class="difficulty-medium" onclick="startGame('medio')">🟡 Médio (3 Pts)</button>
+            <button class="difficulty-hard" onclick="startGame('dificil')">🔴 Difícil (3 Pts)</button>
+        </div>
+        <button onclick="showScreen('screen-category')" style="background: transparent; border: 1px solid var(--text-muted); color: var(--text-muted); margin-top: 15px;">⬅️ Voltar</button>
+    </div>
+
+    <!-- ECRÃ 3: JOGO -->
+    <div id="screen-quiz" class="screen">
+        <div class="status-bar">
+            <span id="quiz-progress">Q: 1/5</span>
+            <span id="quiz-score" style="color: var(--success);">Pontos: 0</span>
+        </div>
+
+        <h3 id="question-text" style="margin-bottom: 15px;">Pergunta...</h3>
+
+        <div id="hint-box" class="hint-box">
+            💡 <strong>Dica:</strong> <span id="hint-text">...</span>
+        </div>
+
+        <!-- 1ª e 2ª Tentativa (Texto) -->
+        <div id="input-area">
+            <input type="text" id="answer-input" placeholder="Escreva a sua resposta...">
+            <button onclick="checkTextAnswer()">Responder</button>
+        </div>
+
+        <!-- 3ª Tentativa (3 Opções) -->
+        <div id="options-area" class="btn-grid" style="display: none;"></div>
+
+        <div id="feedback" class="feedback"></div>
+    </div>
+
+    <!-- ECRÃ 4: RESULTADO -->
+    <div id="screen-result" class="screen">
+        <h2>Fim do Jogo! 🎉</h2>
+        <p style="text-align: center; color: var(--text-muted);">A tua pontuação final:</p>
+        <div id="final-score" class="result-score">0 Pts</div>
+        <button onclick="showScreen('screen-category')">🔄 Jogar Novamente</button>
+    </div>
+</div>
+
+<script>
+    // Base de Dados de Perguntas
+    const quizData = {
+        futebol: {
+            facil: [
+                { q: "Que jogador tem mais Bolas de Ouro na história?", a: "Lionel Messi", alt: ["Messi", "Lionel Messi"], hint: "Argentino que jogou no Barcelona.", options: ["Lionel Messi", "Cristiano Ronaldo", "Pele"] },
+                { q: "Qual a seleção com mais Copas do Mundo vencidas?", a: "Brasil", alt: ["Brasil"], hint: "Única seleção com 5 estrelas.", options: ["Brasil", "Alemanha", "Argentina"] }
+            ],
+            medio: [
+                { q: "Em que ano o Portugal venceu o Euro?", a: "2016", alt: ["2016"], hint: "Golo de Éder na final contra a França.", options: ["2016", "2012", "2004"] }
+            ],
+            dificil: [
+                { q: "Quem foi o melhor marcador da Champions 2013/14 numa só edição com 17 golos?", a: "Cristiano Ronaldo", alt: ["Cristiano Ronaldo", "Ronaldo", "CR7"], hint: "Internacional português vestindo a camisola 7.", options: ["Cristiano Ronaldo", "Benzema", "Lewandowski"] }
+            ]
+        },
+        paises: {
+            facil: [
+                { q: "Qual é a capital de França?", a: "Paris", alt: ["Paris"], hint: "Cidade da Torre Eiffel.", options: ["Paris", "LONDRES", "Madri"] }
+            ],
+            medio: [
+                { q: "Qual é o maior país do mundo em área territorial?", a: "Russia", alt: ["Rússia", "Russia"], hint: "Fica na Europa e na Ásia.", options: ["Rússia", "Canadá", "China"] }
+            ],
+            dificil: [
+                { q: "Qual é a capital da Austrália?", a: "Camberra", alt: ["Camberra", "Canberra"], hint: "Não é Sydney nem Melbourne.", options: ["Camberra", "Sydney", "Brisbane"] }
+            ]
+        },
+        filmes: {
+            facil: [
+                { q: "Qual herói é conhecido como o Homem de Ferro?", a: "Tony Stark", alt: ["Tony Stark", "Stark"], hint: "Bilionário e génio da tecnologia.", options: ["Tony Stark", "Steve Rogers", "Bruce Banner"] }
+            ],
+            medio: [
+                { q: "Qual vilão estalou os dedos em Vingadores: Guerra Infinita?", a: "Thanos", alt: ["Thanos"], hint: "O Titã Louco que buscava as Joias do Infinito.", options: ["Thanos", "Loki", "Ultron"] }
+            ],
+            dificil: [
+                { q: "Em que cidade fictícia vive o Batman?", a: "Gotham", alt: ["Gotham", "Gotham City"], hint: "Cidade conhecida pelo Asilo Arkham.", options: ["Gotham", "Metropolis", "Star City"] }
+            ]
+        }
+    };
+
+    let currentCategory = '';
+    let currentDifficulty = '';
+    let questions = [];
+    let currentQIndex = 0;
+    let score = 0;
+    let attempt = 1;
+
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    function selectCategory(cat) {
+        currentCategory = cat;
+        showScreen('screen-difficulty');
+    }
+
+    function startGame(diff) {
+        currentDifficulty = diff;
+        questions = quizData[currentCategory][diff] || [];
+        if(questions.length === 0) {
+            alert('Ainda sem perguntas neste nível!');
+            return;
+        }
+        currentQIndex = 0;
+        score = 0;
+        showScreen('screen-quiz');
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        attempt = 1;
+        document.getElementById('feedback').innerText = '';
+        document.getElementById('hint-box').style.display = 'none';
+        document.getElementById('input-area').style.display = 'block';
+        document.getElementById('options-area').style.display = 'none';
+        document.getElementById('answer-input').value = '';
+        
+        const q = questions[currentQIndex];
+        document.getElementById('question-text').innerText = q.q;
+        document.getElementById('quiz-progress').innerText = `Q: ${currentQIndex + 1}/${questions.length}`;
+        document.getElementById('quiz-score').innerText = `Pontos: ${score}`;
+    }
+
+    function checkTextAnswer() {
+        const input = document.getElementById('answer-input').value.trim().toLowerCase();
+        const q = questions[currentQIndex];
+        const isCorrect = q.alt.some(alt => alt.toLowerCase() === input);
+
+        if (isCorrect) {
+            let pts = attempt === 1 ? 3 : 2;
+            score += pts;
+            showFeedback(`Correto! +${pts} Pontos`, 'correct');
+            nextQuestion();
+        } else {
+            attempt++;
+            if (attempt === 2) {
+                showFeedback('Incorreto! Tente novamente com a Dica.', 'incorrect');
+                document.getElementById('hint-text').innerText = q.hint;
+                document.getElementById('hint-box').style.display = 'block';
+            } else if (attempt === 3) {
+                showFeedback('Incorreto! Última chance com 3 opções (1 Ponto).', 'incorrect');
+                showOptions(q);
+            }
+        }
+    }
+
+    function showOptions(q) {
+        document.getElementById('input-area').style.display = 'none';
+        const area = document.getElementById('options-area');
+        area.innerHTML = '';
+        area.style.display = 'grid';
+
+        // Embaralha as opções
+        let opts = [...q.options].sort(() => Math.random() - 0.5);
+        opts.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.innerText = opt;
+            btn.onclick = () => {
+                if (opt.toLowerCase() === q.a.toLowerCase()) {
+                    score += 1;
+                    showFeedback('Correto! +1 Ponto', 'correct');
+                } else {
+                    showFeedback(`Errou! A resposta certa era: ${q.a}`, 'incorrect');
+                }
+                nextQuestion();
+            };
+            area.appendChild(btn);
+        });
+    }
+
+    function showFeedback(text, type) {
+        const fb = document.getElementById('feedback');
+        fb.innerText = text;
+        fb.className = `feedback ${type}`;
+    }
+
+    function nextQuestion() {
+        setTimeout(() => {
+            currentQIndex++;
+            if (currentQIndex < questions.length) {
+                loadQuestion();
+            } else {
+                document.getElementById('final-score').innerText = `${score} Pts`;
+                showScreen('screen-result');
+            }
+        }, 1500);
+    }
+
+    // Registo do Service Worker para suporte Offline
+    if ('serviceWorker' in navigator) {
+        const swCode = `
+            self.addEventListener('install', e => e.waitUntil(caches.open('quiz-v1').then(c => c.addAll(['./']))));
+            self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
+        `;
+        const blob = new Blob([swCode], { type: 'application/javascript' });
+        navigator.serviceWorker.register(URL.createObjectURL(blob));
+    }
+</script>
+</body>
+  </html>
